@@ -1,77 +1,111 @@
 package main
 
 import (
+	"encoding/base64"
+	"encoding/json"
+	"motaNMSPlugin/Ping"
 	"motaNMSPlugin/SSH"
+	"os"
+	"sync"
 )
 
 func main() {
 
-	//argument1, _ := base64.StdEncoding.DecodeString(os.Args[1])
-	//
-	//argument2, _ := base64.StdEncoding.DecodeString(os.Args[1])
-	//
-	//pollCategory := make(map[string]interface{})
+	argument, _ := base64.StdEncoding.DecodeString(os.Args[1])
 
-	credentials := make(map[string]interface{})
+	var wait sync.WaitGroup
 
-	credentials["ip"] = "10.20.42.142"
-	credentials["port"] = "22"
-	credentials["username"] = "shekhar"
-	credentials["password"] = "Mind@123"
+	var credentialArray []map[string]interface{}
 
-	SSH.SshDiscovery(credentials)
+	metaData := make(map[string]interface{})
 
-	//var errors []string
-	//
-	//json.Unmarshal(argument1, &pollCategory)
-	//
-	//if pollCategory["category"] == "discovery" {
-	//
-	//	switch pollCategory["type"] {
-	//
-	//	case "ssh":
-	//
-	//		SSH.SshDiscovery(credentials)
-	//
-	//	case "ping":
-	//
-	//	case "snmp":
-	//
-	//	default:
-	//
-	//		fmt.Println("wrong type")
-	//
-	//	}
-	//} else if pollCategory["category"] == "provision" {
-	//
-	//	switch pollCategory["type"] {
-	//
-	//	case "ssh":
-	//
-	//	case "ping":
-	//
-	//	case "snmp":
-	//
-	//	default:
-	//
-	//		fmt.Println("wrong type")
-	//
-	//	}
-	//} else if pollCategory["category"] == "polling" {
-	//
-	//	switch pollCategory["type"] {
-	//
-	//	case "ssh":
-	//
-	//	case "ping":
-	//
-	//	case "snmp":
-	//
-	//	default:
-	//
-	//		fmt.Println("wrong type")
-	//
-	//	}
-	//}
+	var ipAddresses []string
+
+	errr := json.Unmarshal(argument, &credentialArray)
+
+	if errr != nil {
+		return
+	}
+
+	metaData = credentialArray[0]
+
+	if metaData["category"] == "discovery" {
+
+		switch metaData["type"] {
+
+		case "ssh":
+
+			for _, credential := range credentialArray {
+
+				wait.Add(1)
+
+				go SSH.SshDiscovery(credential, &wait)
+
+			}
+
+		case "ping":
+
+			for _, credential := range credentialArray {
+
+				ip := credential["ip"].(string)
+
+				ipAddresses = append(ipAddresses, ip)
+
+				wait.Add(1)
+
+				go ping.Fping(ipAddresses, &wait, "discovery")
+
+			}
+
+		default:
+
+		}
+	} else if (metaData["category"] == "polling") || (metaData["category"] == "provision") {
+
+		switch metaData["type"] {
+
+		case "ssh":
+
+			for _, credential := range credentialArray {
+
+				wait.Add(1)
+
+				go SSH.SshPolling(credential, &wait)
+
+			}
+
+		case "ping":
+
+			for _, credential := range credentialArray {
+
+				ip := credential["ip"].(string)
+
+				ipAddresses = append(ipAddresses, ip)
+
+				if len(ipAddresses) == 200 {
+
+					wait.Add(1)
+
+					go ping.Fping(ipAddresses, &wait, "polling")
+
+					ipAddresses = ipAddresses[:0]
+
+				}
+			}
+
+			if len(ipAddresses) > 0 {
+
+				wait.Add(1)
+
+				go ping.Fping(ipAddresses, &wait, "polling")
+
+			}
+
+		default:
+
+		}
+	}
+
+	wait.Wait()
 
 }

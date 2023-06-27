@@ -1,26 +1,32 @@
 package SSH
 
 import (
+	"encoding/json"
 	"fmt"
 	"golang.org/x/crypto/ssh"
-	"strings"
+	"sync"
 )
 
-func SshDiscovery(credentials map[string]interface{}) {
+func SshDiscovery(credentials map[string]interface{}, wait *sync.WaitGroup) {
+
+	defer wait.Done()
+
+	defer func() {
+		if r := recover(); r != nil {
+		}
+	}()
 
 	var errors []string
+
+	var resultArray []map[string]interface{}
 
 	result := make(map[string]interface{})
 
 	address, config := configMaker(credentials)
 
-	fmt.Println(address, config)
-
 	const cmd = "uname -n"
 
 	sshClient, eror := ssh.Dial("tcp", address, config)
-
-	fmt.Println("client", sshClient)
 
 	if eror != nil {
 
@@ -28,9 +34,9 @@ func SshDiscovery(credentials map[string]interface{}) {
 
 	} else {
 
-		session, eror := sshClient.NewSession()
+		defer sshClient.Close()
 
-		fmt.Println("session")
+		session, eror := sshClient.NewSession()
 
 		if eror != nil {
 
@@ -51,10 +57,6 @@ func SshDiscovery(credentials map[string]interface{}) {
 
 			errors = append(errors, "unable to gather hostname")
 
-		} else {
-
-			result["host"] = strings.Split(output, "\n")[0]
-
 		}
 
 	}
@@ -64,10 +66,17 @@ func SshDiscovery(credentials map[string]interface{}) {
 
 		result["eror"] = errors
 
+		resultArray = append(resultArray, result)
+
 	} else {
 
 		result["status"] = "success"
-	}
 
-	fmt.Println("result", result)
+		resultArray = append(resultArray, result)
+
+	}
+	jsonstring, _ := json.Marshal(resultArray)
+
+	fmt.Println(string(jsonstring))
+
 }
